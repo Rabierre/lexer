@@ -48,7 +48,9 @@ func Parse(input string) *Item {
 	} else if Accept(input, SyntexListDot) {
 		return ParseListDot(input)
 	} else if Accept(input, SyntexListNumber) {
-		// TODO should check number and dot
+		if Accept(string(input[1]), ".") {
+			return ParseListNumber(input)
+		}
 	}
 
 	return nil
@@ -62,13 +64,30 @@ func Accept(input string, valid string) bool {
 	return false
 }
 
+func ParseListNumber(input string) *Item {
+	if strings.IndexRune(SyntexListNumber, rune(input[0])) >= 0 &&
+		strings.IndexRune(".", rune(input[1])) >= 0 {
+		input = input[2:]
+
+		RemovePrefixSpace(&input)
+
+		trans := fmt.Sprintf("<ul><li>%v</li></ul>", input)
+		return &Item{
+			val: trans,
+			typ: itemListNumber,
+		}
+	}
+
+	return nil
+}
+
 func ParseListDot(input string) *Item {
-	if strings.IndexRune(SpaceSyn, rune(input[1])) >= 0 {
+	if strings.IndexRune(SyntexListDot, rune(input[0])) >= 0 {
 		input = input[1:]
 
 		RemovePrefixSpace(&input)
 
-		trans := fmt.Sprintf("<li>%v</li>", input)
+		trans := fmt.Sprintf("<ol><li>%v</li></ol>", input)
 		return &Item{
 			val: trans,
 			typ: itemListDot,
@@ -129,7 +148,8 @@ const (
 )
 
 const (
-	SyntaxHeader  = "#"
-	SpaceSyn      = " "
-	SyntexListDot = "*+-"
+	SyntaxHeader     = "#"
+	SpaceSyn         = " "
+	SyntexListDot    = "*+-"
+	SyntexListNumber = "1234567890"
 )
