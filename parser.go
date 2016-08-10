@@ -9,7 +9,57 @@ func main() {
 	testHeaders()
 	testLists()
 	testCodeBlocks()
+
 	testLinks()
+	testBlockQuotes()
+
+	// TODO: TextStyle
+	// testTextStyle()
+	// TODO: HORIZONTAL RULES
+	testHorizontalRules()
+	// TODO: Images
+}
+
+func testHorizontalRules() {
+	println("##Starting Test Horizontal Rules##")
+
+	parser := getNewParser()
+
+	h1 := "* * *"
+	parser.Parse(h1)
+	println(parser.toHtml() == "<hr/>")
+
+	parser = getNewParser()
+	h2 := "***"
+	parser.Parse(h2)
+	println(parser.toHtml() == "<hr/>")
+
+	parser = getNewParser()
+	h3 := "- - -"
+	parser.Parse(h3)
+	println(parser.toHtml() == "<hr/>")
+
+	parser = getNewParser()
+	h4 := "---"
+	parser.Parse(h4)
+	println(parser.toHtml() == "<hr/>")
+
+	parser = getNewParser()
+	h5 := "- -- --- ----"
+	parser.Parse(h5)
+	println(parser.toHtml() == "<hr/>")
+}
+
+func testBlockQuotes() {
+	println("##Starting Test Blockquotes##")
+
+	parser := getNewParser()
+
+	q1 := "> 1 Level quotes"
+	parser.Parse(q1)
+	println(parser.toHtml() == "<blockquote>1 Level quotes</blockquote>")
+
+	// TODO nested blockquote
 }
 
 func testHeaders() {
@@ -64,11 +114,13 @@ func testLists() {
 	parser = getNewParser()
 
 	// TODO multi line bullets
-	list5 := "1.   Red"
+	list5 := "2.   Red"
 	parser.Parse(list5)
-	list5 = "2.   Green"
+	list5 = "3.   Green"
 	parser.Parse(list5)
-	println(parser.toHtml() == "<ol><li>Red</li><li>Green</li></ol>")
+	list5 = "1.   Blue"
+	parser.Parse(list5)
+	println(parser.toHtml() == "<ol><li>Red</li><li>Green</li><li>Blue</li></ol>")
 }
 
 func testCodeBlocks() {
@@ -103,6 +155,8 @@ func testLinks() {
 	link1 := "[This link](http://example.net/) has no title attribute."
 	parser.Parse(link1)
 	println(parser.toHtml() == "<p><a href=\"http://example.net/\">This link</a> has no title attribute.</p>")
+
+	// TODO: Reference-style links
 }
 
 func getNewParser() *MarkdownParser {
@@ -111,27 +165,27 @@ func getNewParser() *MarkdownParser {
 	}
 }
 
-func (parser *MarkdownParser) Parse(input string) *MarkdownItem {
-	item := (*MarkdownItem)(nil) // go use typed nil, to initialize with nil need type cast
-
+func (parser *MarkdownParser) Parse(input string) {
 	if Accept(input, SyntaxHeader) {
-		return parser.ParseHeader(input)
-	} else if Accept(input, SyntaxListDot) {
-		return parser.ParseListDot(input)
-	} else if Accept(input, SyntaxListNum) {
-		if Accept(string(input[1]), SyntaxDot) {
-			return parser.ParseListNumber(input)
-		}
+		parser.ParseHeader(input)
+	} else if isHorizontalRule(input) {
+		parser.ParseHorizontalRule(input)
+	} else if isList(input) {
+		parser.ParseList(input)
 	} else if strings.HasPrefix(input, SyntaxCodeBlock1) ||
 		strings.HasPrefix(input, SyntaxCodeBlock2) {
-		return parser.ParseCodeBlock(input)
+		parser.ParseCodeBlock(input)
 	} else if isLink(input) {
-		return parser.ParseLink(input)
+		parser.ParseLink(input)
+	} else if Accept(input, SyntaxBlockquote) {
+		parser.ParseBlockquote(input)
 	} else {
-		return parser.ParsePlainText(input)
+		parser.ParsePlainText(input)
 	}
+}
 
-	return item
+func isList(input string) bool {
+	return Accept(input, SyntaxListDot) || (Accept(input, SyntaxListNum) && Accept(string(input[1]), SyntaxDot))
 }
 
 func isLink(input string) bool {
@@ -147,6 +201,19 @@ func isLink(input string) bool {
 	return false
 }
 
+func isHorizontalRule(input string) bool {
+	for _, token := range input {
+		if string(token) == SyntaxSpace {
+			continue
+		}
+
+		if string(token) != "*" && string(token) != "-" {
+			return false
+		}
+	}
+	return true
+}
+
 func Accept(input string, valid string) bool {
 	// TODO Accept는 rune단위로 비교하므로 codeblock의 4spaces를 구분할 수 없음
 	testChar := rune(input[0])
@@ -154,6 +221,29 @@ func Accept(input string, valid string) bool {
 		return true
 	}
 	return false
+}
+
+func (m *MarkdownParser) ParseBlockquote(input string) {
+	if strings.HasPrefix(input, SyntaxBlockquote) {
+		input = input[1:]
+	}
+
+	RemovePrefixSpace(&input)
+
+	item := &MarkdownItem{
+		val: input,
+		typ: itemBlockquote,
+	}
+
+	m.addToParsedList(item)
+}
+
+func (m *MarkdownParser) ParseList(input string) {
+	if Accept(input, SyntaxListDot) {
+		m.ParseListDot(input)
+	} else {
+		m.ParseListNumber(input)
+	}
 }
 
 func (m *MarkdownParser) ParseLink(input string) *MarkdownItem {
@@ -185,6 +275,13 @@ func getIndexFromString(valid string, input string, index int) int {
 		}
 	}
 	return -1
+}
+
+func (m *MarkdownParser) ParseHorizontalRule(input string) {
+	m.addToParsedList(&MarkdownItem{
+		val: "<hr/>",
+		typ: itemHorizontalRule,
+	})
 }
 
 func (m *MarkdownParser) ParsePlainText(input string) *MarkdownItem {
@@ -245,8 +342,6 @@ func (m *MarkdownParser) addToParsedList(item *MarkdownItem) {
 		m.AddNewPhrase(mp)
 	} else if lastPrase := m.contents[len(m.contents)-1]; lastPrase.typ == item.typ {
 		lastPrase.AddNewItem(item)
-		// slice := lastPrase.items[:len(lastPrase.items)]
-		// m.contents[len(m.contents)-1].items = append(slice, item)
 	} else {
 		mp := &MarkdownPhrase{
 			typ:   item.typ,
@@ -311,7 +406,7 @@ func (m *MarkdownParser) ParseHeader(input string) *MarkdownItem {
 
 func RemovePrefixSpace(input *string) {
 	for {
-		if strings.HasPrefix(*input, SpaceSyn) {
+		if strings.HasPrefix(*input, SyntaxSpace) {
 			// slice returns ptr of string
 			*input = (*input)[1:]
 		} else {
@@ -356,6 +451,8 @@ func (m *MarkdownPhrase) getPrefix() string {
 		return "<ol>"
 	} else if m.typ == itemCodeBlock {
 		return "<pre>"
+	} else if m.typ == itemBlockquote {
+		return "<blockquote>"
 	}
 	return ""
 }
@@ -367,6 +464,8 @@ func (m *MarkdownPhrase) getSufix() string {
 		return "</ol>"
 	} else if m.typ == itemCodeBlock {
 		return "</pre>"
+	} else if m.typ == itemBlockquote {
+		return "</blockquote>"
 	}
 	return ""
 }
@@ -395,14 +494,17 @@ const (
 	itemCodeBlock
 	itemLink
 	itemPlainText
+	itemBlockquote
+	itemHorizontalRule
 )
 
 const (
 	SyntaxHeader     = "#"
-	SpaceSyn         = " "
+	SyntaxSpace      = " "
 	SyntaxListDot    = "*+-"
 	SyntaxListNum    = "1234567890"
 	SyntaxDot        = "."
 	SyntaxCodeBlock1 = "    "
 	SyntaxCodeBlock2 = "\t"
+	SyntaxBlockquote = ">"
 )
